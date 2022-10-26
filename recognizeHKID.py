@@ -2,64 +2,208 @@
 import cv2
 import pytesseract
 import numpy as np
-from PIL import Image
-from datetime import datetime, timedelta 
 import os
+import subprocess
+import time
 import json
+from imutils.perspective import four_point_transform
 # import easyocr
 
+
 def exists(digit_res, thresh=0.8):
-	loc = np.where(digit_res >= thresh)
+    loc = np.where(digit_res >= thresh)
 
-	if len(loc[-1]) == 0:
-		return False
+    if len(loc[-1]) == 0:
+        return False
 
-	for pt in zip(*loc[::-1]):
-		if digit_res[pt[1]][pt[0]] == 1:
-			return False
+    for pt in zip(*loc[::-1]):
+        if digit_res[pt[1]][pt[0]] == 1:
+            return False
 
-	return True
+    return True
+
+
+def remove_zero_pad(image):
+    dummy = np.argwhere(image != 0)  # assume blackground is zero
+    max_y = dummy[:, 0].max()
+    min_y = dummy[:, 0].min()
+    min_x = dummy[:, 1].min()
+    max_x = dummy[:, 1].max()
+    crop_image = image[min_y:max_y, min_x:max_x]
+
+    return crop_image
+
 
 def show_image(img):
-	cv2.imshow("Image", img)
-	cv2.waitKey(0)
-	cv2.destroyAllWindows()
+    cv2.imshow("Image", img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+def cmd(command, timeout=5):
+    subp = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, encoding="utf-8")
+    subp.wait(timeout)
+    if subp.poll() == 0:
+        print(subp.communicate()[1])
+    else:
+        print("failed")
+
 
 # Mention the installed location of Tesseract-OCR in your system
 tesseract_exe_path = 'D:\\Programs\\Tesseract OCR\\tesseract.exe'
 pytesseract.pytesseract.tesseract_cmd = tesseract_exe_path
 
-csv = "recognized.csv"
-if not os.path.isfile(csv):
-	# A text file is created and flushed
-	file = open(csv, "w+")
-	file.write("log date, location(true|false), capture date, within 5 minutes(true|false)\n")
-	file.close()
+# csv = "recognized.csv"
+# if not os.path.isfile(csv):
+# 	# A text file is created and flushed
+# 	file = open(csv, "w+")
+# 	file.write("log date, location(true|false), capture date, within 5 minutes(true|false)\n")
+# 	file.close()
 
 # Read image from which text needs to be extracted
-raw = cv2.imread('hk-id-card-sample.jpg')
-# Convert the image to gray scale
+raw = cv2.imread('IMG_20221026_124452.jpg')
+height, width, channels = raw.shape
+
+resize_height = int(height/4)
+resize_width = int(width/4)
+print(height, width)
+print(resize_height, resize_width)
+
+raw = cv2.resize(raw, dsize=(resize_width, resize_height),
+                 interpolation=cv2.INTER_NEAREST)
+
 gray = cv2.cvtColor(raw, cv2.COLOR_BGR2GRAY)
 
-# Performing OTSU threshold
-ret, thresh1 = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
+os.chdir(".\\U-2-Net")
+ts = time.time()
+# tsString = str(ts).replace(".", "_")
+tsString = "1666756920_1268156"
+print(tsString)
+processPath = os.path.join(os.getcwd(), 'images', tsString+".png")
+cv2.imwrite(processPath, raw)
+# print("os.getcwd()",os.getcwd())
+# cmd("python u2net_test.py", 30)
+maskPath = os.path.join(os.getcwd(), 'results', tsString+".png")
+if os.path.exists(maskPath):
+    print("result exist")
+    # clear process file
+    # if os.path.exists(processPath):
+    #     os.remove(processPath)
+    
+    mask = cv2.imread(maskPath)
+    raw = cv2.bitwise_and(raw, mask)
+    # show_image(masked)
+    os.chdir("..")
+else:
+    print("error: process image failed in mask.")
+    exit()
 
-# # Specify structure shape and kernel size.
-# # Kernel size increases or decreases the area
-# # of the rectangle to be detected.
-# # A smaller value like (10, 10) will detect
-# # each word instead of a sentence.
-rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+## rotate image
+image = raw
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+blur = cv2.GaussianBlur(gray, (7,7), 0)
+thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
-# Applying dilation on the threshold image
-dilation = cv2.dilate(thresh1, rect_kernel, iterations = 1)
+# Find contours and sort for largest contour
+cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+displayCnt = None
 
-# Finding contours
-contours, hierarchy = cv2.findContours(dilation, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-# print(contours)
-# Creating a copy of image
-# im2 = crop_img.copy()
-im2 = gray.copy()
+for c in cnts:
+    # Perform contour approximation
+    peri = cv2.arcLength(c, True)
+    approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+    if len(approx) == 4:
+        displayCnt = approx
+        break
+
+# Obtain birds' eye view of image
+warped = four_point_transform(image, displayCnt.reshape(4, 2))
+
+# cv2.imshow("thresh", thresh)
+# cv2.imshow("warped", warped)
+# cv2.waitKey()
+
+## wrap image
+img = raw
+
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# blur image
+blur = cv2.GaussianBlur(gray, (3,3), 0)
+
+# do otsu threshold on gray image
+thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+
+# apply morphology
+kernel = np.ones((7,7), np.uint8)
+morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel)
+
+# get largest contour
+contours = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+contours = contours[0] if len(contours) == 2 else contours[1]
+area_thresh = 0
+for c in contours:
+    area = cv2.contourArea(c)
+    if area > area_thresh:
+        area_thresh = area
+        big_contour = c
+
+# draw white filled largest contour on black just as a check to see it got the correct region
+page = np.zeros_like(img)
+cv2.drawContours(page, [big_contour], 0, (255,255,255), -1)
+
+# get perimeter and approximate a polygon
+peri = cv2.arcLength(big_contour, True)
+corners = cv2.approxPolyDP(big_contour, 0.04 * peri, True)
+
+# draw polygon on input image from detected corners
+polygon = img.copy()
+cv2.polylines(polygon, [corners], True, (0,0,255), 1, cv2.LINE_AA)
+# Alternate: cv2.drawContours(page,[corners],0,(0,0,255),1)
+
+# print the number of found corners and the corner coordinates
+# They seem to be listed counter-clockwise from the top most corner
+print(len(corners))
+print(corners)
+
+# for simplicity get average of top/bottom side widths and average of left/right side heights
+# note: probably better to get average of horizontal lengths and of vertical lengths
+width = 0.5*( (corners[0][0][0] - corners[1][0][0]) + (corners[3][0][0] - corners[2][0][0]) )
+height = 0.5*( (corners[2][0][1] - corners[1][0][1]) + (corners[3][0][1] - corners[0][0][1]) )
+width = np.int0(width)
+height = np.int0(height)
+
+# reformat input corners to x,y list
+icorners = []
+for corner in corners:
+    pt = [ corner[0][0],corner[0][1] ]
+    icorners.append(pt)
+icorners = np.float32(icorners)
+
+# get corresponding output corners from width and height
+ocorners = [ [width,0], [0,0], [0,height], [width,height] ]
+ocorners = np.float32(ocorners)
+
+# get perspective tranformation matrix
+M = cv2.getPerspectiveTransform(icorners, ocorners)
+
+# do perspective
+warped = cv2.warpPerspective(img, M, (width, height))
+
+show_image(warped)
+
+
+## identify process
+warped = cv2.resize(warped, dsize=(476,300), interpolation=cv2.INTER_NEAREST)
+source = warped.copy()
+
+im2 = source.copy()
+
+gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
 
 jsonFile = open('new_format.json')
 locations = json.loads(jsonFile.read())
@@ -81,7 +225,7 @@ for key in locations:
 	y = config["y"] - rect_buffer
 	w = config["w"] + rect_buffer
 	h = config["h"] + rect_buffer
-	cropped = im2[y:y + h, x:x + w]
+	cropped = gray[y:y + h, x:x + w]
 	lang = "eng"
 	if "lang" in config:
 		lang = config["lang"]
@@ -92,7 +236,7 @@ for key in locations:
 	# text = pytesseract.image_to_string(cropped, lang = lang)
 	# text = text.replace("\n","").strip()
 	# cropped = cv2.resize(cropped, dsize=(w * 2, h * 2), interpolation=cv2.INTER_NEAREST)
-		
+
 	cropped = cv2.fastNlMeansDenoising(cropped)
 	cv2.imwrite(key+"_denoised.png", cropped)
 	img_2_string_config = ''
@@ -103,52 +247,18 @@ for key in locations:
 	text_denoised = text_denoised.replace("\n","").strip()
 	print("text_denoised,", text_denoised)
 
-	# easy_denoised = reader.readtext(denoised, detail = 0)
-	# print("easy_denoised,", easy_denoised)
-
-
-	# se=cv2.getStructuringElement(cv2.MORPH_RECT , (8,8))
-	# bg=cv2.morphologyEx(denoised, cv2.MORPH_DILATE, se)
-	# out_gray=cv2.divide(denoised, bg, scale=255)
-	# cv2.imwrite(key+"_out_gray.png", out_gray)
-	# text_out_gray = pytesseract.image_to_string(out_gray, lang = lang)
-	# text_out_gray = text_out_gray.replace("\n","").strip()
-	# print("text_out_gray", text_out_gray)
-
-	# easy_out_gray = reader.readtext(out_gray, detail = 0)
-	# print("easy_out_gray,", easy_out_gray)
-
-	rect = cv2.rectangle(raw, (x, y), (x + w, y + h), (0, 255, 0), 2)
+	rect = cv2.rectangle(source, (x, y), (x + w, y + h), (0, 255, 0), 2)
 	value = text_denoised
 	# if text_denoised == "":
 	# 	value = text_out_gray
-	
+
 	dictionary[key] = value
 	# print("dictionary[key]", dictionary[key])
 
 with open("output.json", "w") as outfile:
 	json.dump(dictionary, outfile)
 
-# base_minute_buffer = 5
 
-# Looping through the identified contours
-# Then rectangular part is cropped and passed on
-# to pytesseract for extracting text from it
-# Extracted text is then written into the text file
-# for cnt in contours:
-# 	x, y, w, h = cv2.boundingRect(cnt)
-# 	# Cropping the text block for giving input to OCR
-# 	cropped = im2[y:y + h, x:x + w]
-# 	# Apply OCR on the cropped image
-# 	# , lang = "chi_tra"
-# 	text = pytesseract.image_to_string(cropped)
-# 	text = text.replace("\n","").strip()
-
-# 	if text != "" :
-# 		print("text", text)
-# 		# Drawing a rectangle on copied image
-# 		rect = cv2.rectangle(raw, (x, y), (x + w, y + h), (0, 0, 255), 2)
-# 		print(x, y, w, h)
-
-
-show_image(raw)
+cv2.imwrite("source.png", source)
+cv2.imwrite("warped.png", warped)
+show_image(source)
