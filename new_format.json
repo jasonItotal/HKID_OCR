@@ -18,7 +18,7 @@
     "y": 80,
     "w": 150,
     "h": 20,
-    "img_2_string_config": "-c tessedit_char_whitelist= ,abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "img_2_string_config": "-c tessedit_char_whitelist='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ,'"
   },
   "date_of_birth": {
     "x": 190,
