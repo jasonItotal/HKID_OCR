@@ -21,10 +21,10 @@
     "img_2_string_config": "-c tessedit_char_whitelist='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ,'"
   },
   "date_of_birth": {
-    "x": 190,
-    "y": 175,
-    "w": 110,
-    "h": 18,
+    "x": 185,
+    "y": 170,
+    "w": 120,
+    "h": 23,
     "img_2_string_config": "-c tessedit_char_whitelist=-1234567890"
   },
   "sex": {
@@ -38,7 +38,7 @@
     "x": 190,
     "y": 195,
     "w": 70,
-    "h": 30,
+    "h": 25,
     "img_2_string_config": "-c tessedit_char_whitelist=*ACRUZXWOBN"
   },
   "date_of_issue": {
