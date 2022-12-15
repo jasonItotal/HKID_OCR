@@ -26,13 +26,67 @@ import glob
 
 from model import U2NETP  # small version u2net 4.7 MB
 
+from flask import Flask, request, Response, jsonify
+
 # need to run only once to download and load model into memory
 ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
 
 # Mention the installed location of Tesseract-OCR in your system
-tesseract_exe_path = 'D:\\Programs\\Tesseract OCR\\tesseract.exe'
+tesseract_exe_path = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 pytesseract.pytesseract.tesseract_cmd = tesseract_exe_path
 
+
+def image_to_box(img):
+    boxes = pytesseract.image_to_boxes(img, lang='eng')  # Run tesseract, returning the bounding boxes
+
+    h, w, _ = img.shape # assumes color image
+    mask = np.zeros((h, w), np.uint8)
+
+    # Fill the bounding boxes on the image
+    for b in boxes.splitlines():
+        b = b.split(' ')
+        mask = cv2.rectangle(mask, (int(b[1]), h - int(b[2])), (int(b[3]), h - int(b[4])), 255, -1)
+
+    mask = cv2.dilate(mask, np.ones((5, 5), np.uint8))  # Dilate the boxes in the mask
+    
+    show_image(mask)
+
+def check_template(image, template="old_card_template.png"):
+    print("in check template")
+    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    template = cv2.imread(template, 0)
+    w, h = template.shape[::-1]
+
+    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+    threshold = 0.8
+    loc = np.where(res >= threshold)
+    pt_list = zip(*loc[::-1])
+
+    result = True
+    # print(F"len(list(pt_list)):{len(list(pt_list))}")
+    if len(list(pt_list)) == 0:
+        result = False
+    # for pt in pt_list:
+    #     cv2.rectangle(image, pt, (pt[0] + w, pt[1] + h), (0, 0, 255), 2)
+    # show_image(image)
+    # print(result)
+    return result
+
+def is_old_card(source):
+    image = source.copy()
+    is_old_card = check_template(image)
+    rotated = False
+    if not is_old_card:
+        is_old_card = check_template(
+            image, template="old_card_template_rotated.png")
+        if is_old_card:
+            rotated = True
+        # image = cv2.rotate(image, cv2.ROTATE_180)
+        # show_image(image)
+        
+    print('is_old_card')
+    print(is_old_card)
+    return [is_old_card,rotated]
 
 def normPRED(d):
     ma = torch.max(d)
@@ -148,29 +202,10 @@ def cmd(command, timeout=5):
 # input source_image output a wrapped image
 def wrap_image(process_image_path):
     source_image = cv2.imread(process_image_path)
-    height, width, _ = source_image.shape
-
-    resize_height = height
-    resize_width = width
-    # pic is long pic
-    if height > width and height > 1000:
-        resize_height = int(1000)
-        resize_width = int(width*resize_height/height)
-    elif width > height and width > 1000:
-        resize_width = int(1000)
-        resize_height = int(height*resize_width/width)
-
-    # print(height, width)
-    # print(resize_height, resize_width)
-
-    source_image = cv2.resize(source_image, dsize=(resize_width, resize_height),
-                              interpolation=cv2.INTER_NEAREST)
-
-    gray = cv2.cvtColor(source_image, cv2.COLOR_BGR2GRAY)
+    # height, width, _ = source_image.shape
 
     mask = u2net_remove_background(process_image_path)
     source_image = cv2.bitwise_and(source_image, mask)
-
     # rotate image
     image = source_image
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -191,19 +226,35 @@ def wrap_image(process_image_path):
         if len(approx) == 4:
             displayCnt = approx
             break
-    # Obtain birds' eye view of image
-    return four_point_transform(image, displayCnt.reshape(4, 2))
-
+    if displayCnt is not None:
+        # Obtain birds' eye view of image
+        return four_point_transform(image, displayCnt.reshape(4, 2))
+    else:
+        return image
  # identify process
+
+
 def identify_hkid(source_image):
     source_image = cv2.resize(source_image, dsize=(476, 300),
                         interpolation=cv2.INTER_NEAREST)
 
     im2 = source_image.copy()
 
+    config_json = 'new_format.json'
+    result = is_old_card(im2)
+    # result[0] check is old card
+    if result[0]:
+        print("old card detected.")
+        config_json = 'old_format.json'
+
+    # result[1] check is rotated
+    if result[1]:
+        im2 = cv2.rotate(im2,cv2.ROTATE_180)
+        
+    
     gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
 
-    jsonFile = open('new_format.json')
+    jsonFile = open(config_json)
     locations = json.loads(jsonFile.read())
 
     # reader = easyocr.Reader(['ch_tra','en'])
@@ -215,8 +266,6 @@ def identify_hkid(source_image):
     # print(locations)
     for key in locations:
         config = locations[key]
-        # print("key:")
-        # print(key)
         rect_buffer = 5
         # print("config:")
         x = config["x"] - rect_buffer
@@ -228,16 +277,15 @@ def identify_hkid(source_image):
         if "lang" in config:
             lang = config["lang"]
             
-        cropped = cv2.fastNlMeansDenoising(cropped)
-        cv2.imwrite(key+"_denoised.png", cropped)
+        if key == 'name' or key == 'name_en':
+            cropped = cv2.blur(cropped, (2, 2))
+        cv2.imwrite(key+".png", cropped)
         img_2_string_config = ''
         if "img_2_string_config" in config:
             img_2_string_config = config["img_2_string_config"]
             # text_denoised = pytesseract.image_to_string(cropped, lang = lang, config=img_2_string_config)
         # print("lang", lang)
         if lang == "eng":
-            # print("pytesseract")
-            # print("img_2_string_config", img_2_string_config)
             text = pytesseract.image_to_string(
                 cropped, lang=lang, config=img_2_string_config)
         else:
@@ -260,36 +308,68 @@ def identify_hkid(source_image):
         # print("key,", value)
         # print("dictionary[key]", dictionary[key])
 
-    with open("output.json", "w") as outfile:
-        json.dump(dictionary, outfile)
+    ##write result as json file
+    with open("output.json", "w", encoding="utf-8") as outfile:
+        json.dump(dictionary, outfile, ensure_ascii=False)
 
     # print("dictionary", dictionary)
 
     cv2.imwrite("detect_zone.png", im2)
     cv2.imwrite("source.png", source_image)
+    
+    os.chdir("..")
     # show_image(im2)
+    return dictionary
     
 
 if __name__ == '__main__':
-    # Read image from which text needs to be extracted
-    process_image_path = 'hk-id-card-sample-rotated.jpg'
-    if not os.path.exists(process_image_path):
-        print("Image not found")
-        exit()
-    # process_image = cv2.imread(process_image_path)
+    image = cv2.imread("received\\hkid.jpg")
+    templateName = "old_card_template.png"
+    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    template = cv2.imread(templateName, 0)
+    show_image(img_gray)
+    show_image(template)
+    w, h = template.shape[::-1]
+    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+    threshold = 0.8
+    loc = np.where(res >= threshold)
+    pt_list = zip(*loc[::-1])
+
+    result = True
+    # print(F"len(list(pt_list)):{len(list(pt_list))}")
+    if len(list(pt_list)) == 0:
+        result = False
+    print(result)
+
+app = Flask(__name__)
+
+@app.route('/hkid_ocr', methods=['POST'])
+def hkid_ocr():
+    image = request.files['hkid']
+    process_image_path = "received\\hkid.jpg"
+    image.save(process_image_path)
     do_wrapped = True
     if do_wrapped:
         process_image = wrap_image(process_image_path)
-    identify_hkid(process_image)
+    else:
+        process_image = cv2.imread(process_image_path)
     
-    # remove_background = u2net_remove_background(process_image_path)
-    # print("remove_background", remove_background)
-    # show_image(remove_background)
-
-
+    hkid_info = identify_hkid(process_image)
     process_time = time.process_time()
-    # print('process_time:', process_time)
     t_sec = round(process_time)
     (t_min, t_sec) = divmod(t_sec,60)
     (t_hour,t_min) = divmod(t_min,60) 
+    
     print('Time passed: {}hour:{}min:{}sec'.format(t_hour,t_min,t_sec))
+    print("process_image_path")
+    file_path = os.path.join(os.getcwd(),process_image_path)
+    print(file_path)
+    if os.path.exists(file_path):
+        print("process file exist")
+        print("clear process file")
+        os.remove(file_path)
+    else:
+        print("process file not exist")
+    return jsonify(
+        hkid_info
+    )

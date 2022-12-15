@@ -1,52 +1,58 @@
 {
-  "chinese_commercial_code": {
-    "x": 127,
-    "y": 93,
-    "w": 145,
-    "h": 21
-  },
   "name": {
-    "x": 11,
-    "y": 43,
-    "w": 140,
+    "x": 10,
+    "y": 50,
+    "w": 200,
     "h": 30,
     "lang": "chi_tra"
   },
   "name_en": {
-    "x": 11,
-    "y": 70,
-    "w": 140,
-    "h": 21
-  },
-  "is_permanent_resident": {
-    "x": 129,
-    "y": 169,
-    "w": 52,
-    "h": 16
-  },
-  "sex": {
-    "x": 260,
-    "y": 145,
-    "w": 50,
+    "x": 10,
+    "y": 80,
+    "w": 200,
     "h": 20,
-    "lang": "chi_tra"
+    "img_2_string_config": "-c tessedit_char_whitelist='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ,'"
+  },
+  "chinese_commercial_code": {
+    "x": 135,
+    "y": 100,
+    "w": 230,
+    "h": 38,
+    "img_2_string_config": "-c tessedit_char_whitelist= 1234567890"
   },
   "date_of_birth": {
-    "x": 129,
-    "y": 148,
-    "w": 102,
-    "h": 18
+    "x": 135,
+    "y": 165,
+    "w": 130,
+    "h": 23,
+    "img_2_string_config": "--psm 7 -c tessedit_char_whitelist=-1234567890"
+  },
+  "gender": {
+    "x": 315,
+    "y": 165,
+    "w": 30,
+    "h": 20,
+    "img_2_string_config": "--psm 10 -c tessedit_char_whitelist=FM"
+  },
+  "is_permanent_resident": {
+    "x": 135,
+    "y": 185,
+    "w": 80,
+    "h": 20,
+    "img_2_string_config": "-c tessedit_char_whitelist=*ACRUZXWOBN"
   },
   "date_of_issue": {
-    "x": 129,
-    "y": 231,
-    "w": 105,
-    "h": 24
+    "x": 135,
+    "y": 255,
+    "w": 130,
+    "h": 50,
+    "img_2_string_config": "--psm 7 -c tessedit_char_whitelist=-1234567890"
   },
   "hkid": {
-    "x": 275,
-    "y": 231,
-    "w": 130,
-    "h": 24
+    "x": 300,
+    "y": 255,
+    "w": 170,
+    "h": 50,
+    "img_2_string_config": "-c tessedit_char_whitelist='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890()'"
   }
 }
