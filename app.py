@@ -323,23 +323,30 @@ def identify_hkid(source_image):
     
 
 if __name__ == '__main__':
-    image = cv2.imread("received\\hkid.jpg")
-    templateName = "old_card_template.png"
-    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    template = cv2.imread(templateName, 0)
-    show_image(img_gray)
-    show_image(template)
-    w, h = template.shape[::-1]
-    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-    threshold = 0.8
-    loc = np.where(res >= threshold)
-    pt_list = zip(*loc[::-1])
-
-    result = True
-    # print(F"len(list(pt_list)):{len(list(pt_list))}")
-    if len(list(pt_list)) == 0:
-        result = False
-    print(result)
+    process_image_path = "received\\download.jfif"
+    # image.save(process_image_path)
+    do_wrapped = True
+    if do_wrapped:
+        process_image = wrap_image(process_image_path)
+    else:
+        process_image = cv2.imread(process_image_path)
+    
+    hkid_info = identify_hkid(process_image)
+    process_time = time.process_time()
+    t_sec = round(process_time)
+    (t_min, t_sec) = divmod(t_sec,60)
+    (t_hour,t_min) = divmod(t_min,60) 
+    
+    print('Time passed: {}hour:{}min:{}sec'.format(t_hour,t_min,t_sec))
+    print("process_image_path")
+    file_path = os.path.join(os.getcwd(),process_image_path)
+    print(file_path)
+    if os.path.exists(file_path):
+        print("process file exist")
+        print("clear process file")
+        os.remove(file_path)
+    else:
+        print("process file not exist")
 
 app = Flask(__name__)
 
