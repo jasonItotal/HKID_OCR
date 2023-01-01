@@ -2,7 +2,7 @@
 import cv2
 import pytesseract
 import numpy as np
-import subprocess
+# import subprocess
 # from cnocr import CnOcr
 # import easyocr
 from paddleocr import PaddleOCR
@@ -189,14 +189,14 @@ def show_image(img):
     cv2.destroyAllWindows()
 
 
-def cmd(command, timeout=5):
-    subp = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, encoding="utf-8")
-    subp.wait(timeout)
-    if subp.poll() == 0:
-        print(subp.communicate()[1])
-    else:
-        print("failed")
+# def cmd(command, timeout=5):
+#     subp = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+#                             stderr=subprocess.PIPE, encoding="utf-8")
+#     subp.wait(timeout)
+#     if subp.poll() == 0:
+#         print(subp.communicate()[1])
+#     else:
+#         print("failed")
 
 
 # input source_image output a wrapped image
