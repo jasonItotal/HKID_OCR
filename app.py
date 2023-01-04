@@ -28,6 +28,11 @@ from model import U2NETP  # small version u2net 4.7 MB
 
 from flask import Flask, request, Response, jsonify
 
+import subprocess
+import imutils
+
+from flask_cors import CORS
+
 # need to run only once to download and load model into memory
 ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
 
@@ -35,21 +40,6 @@ ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
 tesseract_exe_path = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
 pytesseract.pytesseract.tesseract_cmd = tesseract_exe_path
 
-
-def image_to_box(img):
-    boxes = pytesseract.image_to_boxes(img, lang='eng')  # Run tesseract, returning the bounding boxes
-
-    h, w, _ = img.shape # assumes color image
-    mask = np.zeros((h, w), np.uint8)
-
-    # Fill the bounding boxes on the image
-    for b in boxes.splitlines():
-        b = b.split(' ')
-        mask = cv2.rectangle(mask, (int(b[1]), h - int(b[2])), (int(b[3]), h - int(b[4])), 255, -1)
-
-    mask = cv2.dilate(mask, np.ones((5, 5), np.uint8))  # Dilate the boxes in the mask
-    
-    show_image(mask)
 
 def check_template(image, template="old_card_template.png"):
     print("in check template")
@@ -320,41 +310,21 @@ def identify_hkid(source_image):
     os.chdir("..")
     # show_image(im2)
     return dictionary
-    
 
-if __name__ == '__main__':
-    process_image_path = "received\\download.jfif"
-    # image.save(process_image_path)
-    do_wrapped = True
-    if do_wrapped:
-        process_image = wrap_image(process_image_path)
-    else:
-        process_image = cv2.imread(process_image_path)
-    
-    hkid_info = identify_hkid(process_image)
-    process_time = time.process_time()
-    t_sec = round(process_time)
-    (t_min, t_sec) = divmod(t_sec,60)
-    (t_hour,t_min) = divmod(t_min,60) 
-    
-    print('Time passed: {}hour:{}min:{}sec'.format(t_hour,t_min,t_sec))
-    print("process_image_path")
-    file_path = os.path.join(os.getcwd(),process_image_path)
-    print(file_path)
-    if os.path.exists(file_path):
-        print("process file exist")
-        print("clear process file")
-        os.remove(file_path)
-    else:
-        print("process file not exist")
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/hkid_ocr', methods=['POST'])
 def hkid_ocr():
     image = request.files['hkid']
     process_image_path = "received\\hkid.jpg"
     image.save(process_image_path)
+
+    do_deblur = True
+    if do_deblur:
+        deblur(process_image_path)
+
     do_wrapped = True
     if do_wrapped:
         process_image = wrap_image(process_image_path)
@@ -371,12 +341,57 @@ def hkid_ocr():
     print("process_image_path")
     file_path = os.path.join(os.getcwd(),process_image_path)
     print(file_path)
-    if os.path.exists(file_path):
-        print("process file exist")
-        print("clear process file")
-        os.remove(file_path)
-    else:
-        print("process file not exist")
+    clear_process = False
+    if clear_process:
+        if os.path.exists(file_path):
+            print("process file exist")
+            print("clear process file")
+            os.remove(file_path)
+        else:
+            print("process file not exist")
     return jsonify(
         hkid_info
-    )
+    )    
+
+def run_cmd(command: str) -> subprocess.CompletedProcess:
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE)
+    return result
+
+def deblur(process_image_path):
+    run_cmd(f'.\\realesrgan\\realesrgan-ncnn-vulkan.exe -i {process_image_path} -o {process_image_path}')
+    image = cv2.imread(process_image_path)
+    image = imutils.rotate(image, -270)
+    cv2.imwrite(process_image_path, image)
+
+if __name__ == '__main__':
+    # process_image_path = ".\\received\\hkid.jpg"
+    
+    # do_deblur = True
+    # if do_deblur:
+    #     deblur(process_image_path)
+
+    # do_wrapped = True
+    # if do_wrapped:
+    #     process_image = wrap_image(process_image_path)
+    # else:
+    #     process_image = cv2.imread(process_image_path)
+    
+    # hkid_info = identify_hkid(process_image)
+    # process_time = time.process_time()
+    # t_sec = round(process_time)
+    # (t_min, t_sec) = divmod(t_sec,60)
+    # (t_hour,t_min) = divmod(t_min,60) 
+    
+    # print('Time passed: {}hour:{}min:{}sec'.format(t_hour,t_min,t_sec))
+    # print("process_image_path")
+    # file_path = os.path.join(os.getcwd(),process_image_path)
+    # print(file_path)
+    # clear_process = False
+    # if clear_process:
+    #     if os.path.exists(file_path):
+    #         print("process file exist")
+    #         print("clear process file")
+    #         os.remove(file_path)
+    #     else:
+    #         print("process file not exist")
+    app.run()
